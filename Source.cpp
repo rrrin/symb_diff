@@ -11,7 +11,7 @@ using namespace std;
 class Expression
 {
 public:
-//	virtual Expression * diff() = 0;
+	virtual Expression * diff() = 0;
 	virtual void print() const = 0;
 };
 
@@ -24,11 +24,10 @@ public:
 		x = a;
 	}
 	virtual ~number() {};
-	//number *diff(double a)
-	//{
-	//	number b(0);
-	//	return b;
-	//}
+	virtual number* diff() override
+	{
+		return new number(0);
+	}
 	virtual void print() const override
 	{
 		cout << "class number x = " << x << endl;
@@ -44,11 +43,10 @@ public:
 	{
 		name = a;
 	}
-	//number *diff(double a)
-	//{
-	//	number b(0);
-	//	return b;
-	//}
+	virtual number* diff() override
+	{
+		return new number(1);
+	}
 	virtual void print() const override
 	{
 		cout << "class variable name = " << name << endl;
@@ -56,14 +54,56 @@ public:
 
 };
 
-class add : Expression
+class add : public Expression
 {
+	Expression *left, *right;
+public:
+	add(Expression *le, Expression *r)
+		: left(le), right(r)
+	{
+		assert(left != nullptr);
+		assert(right != nullptr);
+	}
+
+	virtual void print() const override
+	{
+		cout << "class add left = " ;
+		left->print();
+		cout << " right = ";
+		right->print();
+	}
+
+	virtual add* diff() override
+	{
+		Expression *le = left->diff();
+		Expression*r = right->diff();
+		return new add(le, r);
+	}
 
 };
 
 class sub : Expression
 {
+	Expression *left, *right;
+public:
+	sub(Expression *le, Expression *r)
+		: left(le), right(r)
+	{
+		assert(left != nullptr);
+		assert(right != nullptr);
+	}
 
+	virtual void print() const override
+	{
+		cout << "class sub left = " << left << " right = " << right << endl;
+	}
+
+	virtual sub* diff() override
+	{
+		Expression *le = left->diff();
+		Expression*r = right->diff();
+		return new sub(le, r);
+	}
 };
 
 void test(const Expression &e)
@@ -99,4 +139,12 @@ int main()
 	Expression * exp = create(1);
 	exp->print();
 	delete exp;
+
+// x+2
+	variable x("x");
+	number n(2);
+	add s(&x, &n);
+	s.print();
+	Expression* s1= s.diff();
+	s1->print();
 }
