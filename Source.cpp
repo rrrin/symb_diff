@@ -34,6 +34,10 @@ public:
 	{
 		x = a;
 	}
+	number(const number& b)
+	{
+		x = b.x;
+	}
 	virtual number* diff() override
 	{
 		return new number(0);
@@ -46,7 +50,6 @@ public:
 	{
 		return x!=0;
 	}
-
 };
 
 class variable : public Expression
@@ -153,6 +156,61 @@ public:
 	}
 };
 
+class div : public double_oper
+{
+public:
+	div(Expression *a, Expression *b)
+		: double_oper(a, b, " / ")
+	{
+	}
+	virtual div* diff() override
+	{
+		Expression *a = new mul(left->diff(), right);
+		Expression *b = new mul(left, right->diff());
+		Expression *c = new sub(a, b);
+		Expression *d = new mul(right, right);
+		return new div(c, d);
+	}
+};
+
+class pov : public Expression
+{
+	Expression *base;
+	Expression *degree;
+public:
+	pov(Expression *a, Expression *b)
+	{
+		base = a;
+		degree = b;
+	}
+	virtual mul * diff() override
+	{
+		Expression * y = base->diff();
+		return new mul(degree, new mul(y, new pov(base, new sub(degree, new number(1)))));
+	}
+	virtual void print() const override
+	{
+			cout << " (";
+			if (base->not_zero())
+				base->print();
+			if (base->not_zero() && degree->not_zero())
+				cout << "^";
+			if (degree->not_zero())
+				degree->print();
+			cout << ") ";
+	}
+};
+
+class tg : public Expression
+{
+	char name;
+public:
+	Expression Sin(Expression& x)
+	{
+
+	}
+};
+
 void test(const Expression &e)
 {
 	cout << "test - ";
@@ -194,6 +252,16 @@ int main()
 		Expression* s1 = s.diff();
 		cout << "s.diff = ";
 		s1->print();
+		cout << endl;
+	}
+	//x^3
+	{
+		number n(3);
+		variable x;
+		pov p(&x, &n);
+		p.print();
+		Expression*p1 = p.diff();
+		p1->print();
 		cout << endl;
 	}
 
