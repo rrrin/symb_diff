@@ -15,7 +15,7 @@ typedef shared_ptr<Expression> expr_p;
 class Expression
 {
 public:
-	virtual Expression * diff() = 0;
+	virtual Expression * diff(string x) = 0;
 //	virtual expr_p diff() = 0;
 	virtual void print() const = 0;
 	virtual bool not_zero() const
@@ -26,21 +26,21 @@ public:
 };
 
 
-class number : public  Expression
+class Number : public  Expression
 {
 	double x;
 public:
-	number(double a)
+	Number(double a)
 	{
 		x = a;
 	}
-	number(const number& b)
+	Number(const Number& b)
 	{
 		x = b.x;
 	}
-	virtual number* diff() override
+	virtual Number* diff(string x) override
 	{
-		return new number(0);
+		return new Number(0);
 	}
 	virtual void print() const override
 	{
@@ -56,13 +56,15 @@ class variable : public Expression
 {
 	string name;
 public:
-	variable()
-		: name("X")
+	variable(string x)
 	{
+		name = x;
 	}
-	virtual number* diff() override
+	virtual Number* diff(string X) override
 	{
-		return new number(1);
+		if (X==name)
+			return new Number(1);
+		else return new Number(0);
 	}
 	virtual void print() const override
 	{
@@ -108,10 +110,10 @@ public:
 		assert(right != nullptr);
 	}
 
-	virtual add* diff() override
+	virtual add* diff(string x) override
 	{
-		Expression *le = left->diff();
-		Expression*r = right->diff();
+		Expression *le = left->diff(x);
+		Expression*r = right->diff(x);
 		return new add(le, r);
 	}
 
@@ -127,16 +129,28 @@ public:
 		assert(right != nullptr);
 	}
 
-	virtual add* diff() override
+	virtual add* diff(string x) override
 	{
-		Expression *le = left->diff();
-		Expression*r = right->diff();
+		Expression *le = left->diff(x);
+		Expression*r = right->diff(x);
 		Expression *op1 = new mul(le, right);
 		Expression *op2 = new mul(left, r);
 		return new add(op1, op2);
 	}
-};
+	virtual void print() const override
+	{
+		cout << " (";
+		if (left->not_zero() && right->not_zero())
+		{
+			left->print();
+			cout << name_oper;
+			right->print();
+		}
+		else cout << " 0 ";
+		cout << ") ";
+	}
 
+};
 class sub : public double_oper
 {
 public:
@@ -147,46 +161,62 @@ public:
 		assert(right != nullptr);
 	}
 
-	virtual add* diff() override
+	virtual add* diff(string x) override
 	{
-		Expression *le = left->diff();
-		Expression*r = right->diff();
-		Expression* r2 = new mul(new number(-1.), r);
+		Expression *le = left->diff(x);
+		Expression*r = right->diff(x);
+		Expression* r2 = new mul(new Number(-1.), r);
 		return new add(le, r2);
 	}
 };
 
-class div : public double_oper
+class Div : public double_oper
 {
 public:
-	div(Expression *a, Expression *b)
+	Div(Expression *a, Expression *b)
 		: double_oper(a, b, " / ")
 	{
 	}
-	virtual div* diff() override
+	virtual Div* diff(string x) override
 	{
-		Expression *a = new mul(left->diff(), right);
-		Expression *b = new mul(left, right->diff());
+		Expression *a = new mul(left->diff(x), right);
+		Expression *b = new mul(left, right->diff(x));
 		Expression *c = new sub(a, b);
 		Expression *d = new mul(right, right);
-		return new div(c, d);
+		return new Div(c, d);
+	}
+	virtual void print() const override
+	{
+		cout << " (";
+		if (!right->not_zero())
+			cout << " inf ";
+
+		else if (!left->not_zero())
+			cout << " 0 ";
+		else
+		{
+			left->print();
+			cout << name_oper;
+			right->print();
+		}
+		cout << ") ";
 	}
 };
 
-class pov : public Expression
+class Pow : public Expression
 {
 	Expression *base;
 	Expression *degree;
 public:
-	pov(Expression *a, Expression *b)
+	Pow(Expression *a, Expression *b)
 	{
 		base = a;
 		degree = b;
 	}
-	virtual mul * diff() override
+	virtual mul * diff(string x) override
 	{
-		Expression * y = base->diff();
-		return new mul(degree, new mul(y, new pov(base, new sub(degree, new number(1)))));
+		Expression * y = base->diff(x);
+		return new mul(degree, new mul(y, new Pow(base, new sub(degree, new Number(1)))));
 	}
 	virtual void print() const override
 	{
@@ -201,14 +231,65 @@ public:
 	}
 };
 
-class tg : public Expression
+Expression * make_cos(Expression *p);//декларация функции возвращает косинус, определим позже
+class Sin : public Expression
 {
-	char name;
+	Expression *arg;
 public:
-	Expression Sin(Expression& x)
+	Sin(Expression *a)
+		: arg(a)
 	{
+		assert(arg != nullptr);
+	}
+	virtual Expression * diff(string x) override
+	{
+		Expression * y = arg->diff(x);
+		return new mul(y, make_cos(arg));
+	}
+	virtual void print() const override
+	{}
+};
+class Cos : public Expression
+{
+	Expression *arg;
+public:
+	Cos (Expression *a)
+		: arg(a)
+	{
+		assert(arg != nullptr);
+	}
+	virtual Expression * diff(string x) override
+	{
+		Expression * y = arg->diff(x);
+		return new mul(new mul(new Number(-1),y), new Sin(arg));
+	}
+	virtual void print() const override
+	{}
+};
+
+Expression * make_cos(Expression *p)
+{
+	return new Cos(p);
+}
+
+class Ctg : public Expression
+{
+	Expression *arg;
+public:
+	Ctg(Expression *a)
+		: arg(a)
+	{
+		assert(arg != nullptr);
+	}
+	virtual Expression * diff(string x) override
+	{
+		Expression * y = arg->diff(x);
+		Expression * t = new Pow(new Sin(arg), new Number(2));
+		return new Div(new mul(new Number(-1), y), t);
 
 	}
+	virtual void print() const override
+	{}
 };
 
 void test(const Expression &e)
@@ -219,48 +300,58 @@ void test(const Expression &e)
 }
 int main()
 {
-	number t(2.);
-	variable y;
+	Number t(2.);
+	variable y("y");
 	test(t);
 	test(y);
 	{
 		// x+2
 		cout << "test  X + 2 " << endl;
-		variable x;
-		number n(2);
+		variable x("x");
+		Number n(2);
 		add s(&x, &n);
 		cout << "s = ";
 		s.print();
 		cout << endl;
 
-		Expression* s1 = s.diff();
+		Expression* s1 = s.diff("x");
 		cout << "s.diff = ";
 		s1->print();
 		cout << endl;
 	}
 	{
 		// 5 - X
-		expr_p x1(new variable);
+		expr_p x1(new variable("x"));
 		cout << "test  5 - X " << endl;
-		variable x;
-		number n(5);
+		variable x("x");
+		Number n(5);
 		sub s(&n, &x);
 		cout << "s = ";
 		s.print();
 		cout << endl;
 
-		Expression* s1 = s.diff();
+		Expression* s1 = s.diff("x");
 		cout << "s.diff = ";
 		s1->print();
 		cout << endl;
 	}
 	//x^3
 	{
-		number n(3);
-		variable x;
-		pov p(&x, &n);
+		Number n(3);
+		variable x("x");
+		Pow p(&x, &n);
 		p.print();
-		Expression*p1 = p.diff();
+		Expression*p1 = p.diff("x");
+		p1->print();
+		cout << endl;
+	}
+	{
+		cout << "diff by y" << endl;
+		Number n(3);
+		variable x("x");
+		Pow p(&x, &n);
+		p.print();
+		Expression*p1 = p.diff("y");
 		p1->print();
 		cout << endl;
 	}
