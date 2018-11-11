@@ -6,16 +6,19 @@
 #include <vector>
 #include <exception>
 #include <memory>
+#include <math.h>
+#include <limits>
 using namespace std;
 //
 //
 //
 class Expression;
+class Number;
 typedef shared_ptr<Expression> expr_p;
 class Expression
 {
 public:
-	virtual Expression * diff_impl(string x) = 0;
+	virtual Expression * diff_impl(const string x) = 0;
 	Expression * diff(const string x)
 	{
 		Expression * d = this->diff_impl(x);
@@ -31,6 +34,14 @@ public:
 	{
 		return true;
 	}
+	virtual bool not_one() const
+	{
+		return true;
+	}
+	virtual Number* is_number() 
+	{
+		return nullptr;
+	}
 	virtual ~Expression() {};
 };
 
@@ -38,6 +49,7 @@ public:
 class Number : public  Expression
 {
 	double x;
+//	double value;
 public:
 	Number(double a)
 	{
@@ -47,7 +59,7 @@ public:
 	{
 		x = b.x;
 	}
-	virtual Number* diff_impl(string x) override
+	virtual Number* diff_impl(const string x) override
 	{
 		return new Number(0);
 	}
@@ -59,6 +71,18 @@ public:
 	{
 		return x!=0;
 	}
+	virtual bool not_one() const override
+	{
+		return x != 1.;
+	}
+	virtual Number* is_number() override
+	{
+		return this;
+	}
+	double val() const
+	{
+		return x;
+	}
 };
 
 class variable : public Expression
@@ -69,7 +93,7 @@ public:
 	{
 		name = x;
 	}
-	virtual Number* diff_impl(string X) override
+	virtual Number* diff_impl(const string X) override
 	{
 		if (X==name)
 			return new Number(1);
@@ -107,6 +131,13 @@ public:
 			right->print();
 		cout << ") ";
 	}
+	virtual Number* calc(double a, double b) = 0;
+	Expression* calc_numb()
+	{
+		if (left->is_number() && right->is_number())
+			return this->calc(left->is_number()->val(), right->is_number()->val());
+		else return this;
+	}
 };
 class Add : public double_oper
 {
@@ -118,7 +149,7 @@ public:
 		assert(right != nullptr);
 	}
 
-	virtual Add* diff_impl(string x) override
+	virtual Add* diff_impl(const string x) override
 	{
 		Expression *le = left->diff_impl(x);
 		Expression*r = right->diff_impl(x);
@@ -127,14 +158,20 @@ public:
 
 	virtual Expression* symplify()  override
 	{
-		Expression * l = left->symplify();
-		Expression * r = right->symplify();
-		if (!l->not_zero())
-			return r;
-		else if (!r->not_zero())
-			return l;
+		left= left->symplify();
+		right = right->symplify();
+		if (left->is_number() && right->is_number())
+			return calc_numb();
+		if (!left->not_zero())
+			return right;
+		else if (!right->not_zero())
+			return left;
 		else
-			return new Add(l, r);
+			return this;
+	}
+	virtual Number* calc(double a, double b)
+	{
+		return new Number(a + b);
 	}
 };
 
@@ -148,7 +185,7 @@ public:
 		assert(right != nullptr);
 	}
 
-	virtual Add* diff_impl(string x) override
+	virtual Add* diff_impl(const string x) override
 	{
 		Expression *le = left->diff_impl(x);
 		Expression*r = right->diff_impl(x);
@@ -161,9 +198,12 @@ public:
 		cout << " (";
 		if (left->not_zero() && right->not_zero())
 		{
-			left->print();
-			cout << name_oper;
-			right->print();
+			if (left->not_one())
+				left->print();
+			if (left->not_one() && right->not_one())
+				cout << name_oper;
+			if (right->not_one())
+				right->print();
 		}
 		else cout << " 0 ";
 		cout << ") ";
@@ -172,13 +212,25 @@ public:
 	{
 		Expression * l = left->symplify();
 		Expression * r = right->symplify();
-		if (l->not_zero()&&r->not_zero())
-			return new Mul(l, r);
+		if (l->not_zero() && r->not_zero())
+		{
+			if (l->not_one() && r->not_one())
+				return new Mul(l, r);
+			else if (l->not_one())
+				return l;
+			else if (r->not_one())
+				return r;
+			else return new Number(1);
+		}
 		else
 			return new Number(0);
 	}
-
+	virtual Number* calc(double a, double b)
+	{
+		return new Number(a * b);
+	}
 };
+
 class Sub : public double_oper
 {
 public:
@@ -189,7 +241,7 @@ public:
 		assert(right != nullptr);
 	}
 
-	virtual Add* diff_impl(string x) override
+	virtual Add* diff_impl(const string x) override
 	{
 		Expression *le = left->diff_impl(x);
 		Expression*r = right->diff_impl(x);
@@ -207,6 +259,10 @@ public:
 		else
 			return new Sub(l, r);
 	}
+	virtual Number* calc(double a, double b)
+	{
+		return new Number(a - b);
+	}
 };
 
 class Div : public double_oper
@@ -216,7 +272,7 @@ public:
 		: double_oper(a, b, " / ")
 	{
 	}
-	virtual Div* diff_impl(string x) override
+	virtual Div* diff_impl(const string x) override
 	{
 		Expression *a = new Mul(left->diff_impl(x), right);
 		Expression *b = new Mul(left, right->diff_impl(x));
@@ -240,6 +296,32 @@ public:
 		}
 		cout << ") ";
 	}
+	virtual Expression* symplify()  override
+	{
+		Expression * l = left->symplify();
+		Expression * r = right->symplify();
+		if (l->not_zero() && r->not_zero())
+		{
+			if (l->not_one() && r->not_one())
+				return new Div(l, r);
+			else if (l->not_one())
+			{
+				assert(!r->not_one());
+				return l;
+			}
+			else return new Number(1);
+		}
+		else
+		{
+			if (!l->not_zero())
+				return new Number(0);
+			else return new Number(numeric_limits<double>::infinity());
+		}
+	}
+	virtual Number* calc(double a, double b)
+	{
+		return new Number(a / b);
+	}
 };
 
 class Pow : public Expression
@@ -252,7 +334,7 @@ public:
 		base = a;
 		degree = b;
 	}
-	virtual Mul * diff_impl(string x) override
+	virtual Mul * diff_impl(const string x) override
 	{
 		Expression * y = base->diff_impl(x);
 		return new Mul(degree, new Mul(y, new Pow(base, new Sub(degree, new Number(1)))));
@@ -268,6 +350,10 @@ public:
 				degree->print();
 			cout << ") ";
 	}
+	virtual Number* calc(double a, double b)
+	{
+		return new Number(pow(a, b));
+	}
 };
 
 Expression * make_cos(Expression *p);//декларация функции возвращает косинус, определим позже
@@ -280,13 +366,29 @@ public:
 	{
 		assert(arg != nullptr);
 	}
-	virtual Expression * diff_impl(string x) override
+	virtual Expression * diff_impl(const string x) override
 	{
 		Expression * y = arg->diff_impl(x);
 		return new Mul(y, make_cos(arg));
 	}
 	virtual void print() const override
-	{}
+	{
+		cout << "sin (";
+		arg->print();
+		cout<< ") ";
+	}
+	Number *calc(double y)
+	{
+		return new Number(sin(y));
+	}
+	virtual Expression* symplify()
+	{
+		arg = arg->symplify();
+		if (arg->is_number())
+			return calc(arg->is_number()->val());
+		else
+			return this;
+	}
 };
 class Cos : public Expression
 {
@@ -297,13 +399,29 @@ public:
 	{
 		assert(arg != nullptr);
 	}
-	virtual Expression * diff_impl(string x) override
+	virtual Expression * diff_impl(const string x) override
 	{
 		Expression * y = arg->diff_impl(x);
 		return new Mul(new Mul(new Number(-1),y), new Sin(arg));
 	}
 	virtual void print() const override
-	{}
+	{
+		cout << "cos (";
+		arg->print();
+		cout << ") ";
+	}
+	Number *calc(double y)
+	{
+		return new Number(cos(y));
+	}
+	virtual Expression* symplify()
+	{
+		arg = arg->symplify();
+		if (arg->is_number())
+			return calc(arg->is_number()->val());
+		else
+			return this;
+	}
 };
 
 Expression * make_cos(Expression *p)
@@ -320,7 +438,7 @@ public:
 	{
 		assert(arg != nullptr);
 	}
-	virtual Expression * diff_impl(string x) override
+	virtual Expression * diff_impl(const string x) override
 	{
 		Expression * y = arg->diff_impl(x);
 		Expression * t = new Pow(new Sin(arg), new Number(2));
@@ -328,7 +446,23 @@ public:
 
 	}
 	virtual void print() const override
-	{}
+	{
+		cout << "ctg (";
+		arg->print();
+		cout << ") "; 
+	}
+	Number *calc(double y)
+	{
+		return new Number(1./tan(y));
+	}
+	virtual Expression* symplify()
+	{
+		arg = arg->symplify();
+		if (arg->is_number())
+			return calc(arg->is_number()->val());
+		else
+			return this;
+	}
 };
 
 void test(const Expression &e)
@@ -372,9 +506,6 @@ int main()
 		Expression* s1 = s.diff("x");
 		cout << "s1.diff = ";
 		s1->print();
-		Expression* s2 = s1->symplify();
-		cout << "s2.symplify = ";
-		s2->print();
 		cout << endl;
 	}
 	//x^3
@@ -394,11 +525,41 @@ int main()
 		Pow p(&x, &n);
 		p.print();
 		Expression*p1 = p.diff("y");
+		cout << "\n";
 		p1->print();
-
-		cout << "\n p1.symp = ";
-		Expression *p2 = p1->symplify();
-		p2->print();
+		cout << endl;
+	}
+	//5*x
+	{
+		Number n(5);
+		variable x("x");
+		Mul p(&n, &x);
+		p.print();
+		Expression*p1 = p.diff("x");
+		p1->print();
+		cout << endl;
+	}
+	//3x^3+2*x^2+x+10
+	{
+		Number a1(3), a2(2), a3(10);
+		variable x("x");
+		Pow p1(&x, &a1), p2(&x, &a2);
+		Mul q1(&a1, &p1), q2(&a2, &p2);
+		Add t(&q1, new Add(&q2, new Add(&x, &a3)));
+		t.print();
+		cout << "\n t1.symp = ";
+		Expression*t1 = t.diff("x");
+		t1->print();
+		cout << endl;
+	}
+	//ctg^3(x)
+	{
+		variable x("x");
+		Ctg c(&x);
+		Pow p(&c, new Number(3));
+		p.print();
+		Expression*p1 = p.diff("x");
+		p1->print();
 		cout << endl;
 	}
 
