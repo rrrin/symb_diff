@@ -210,16 +210,18 @@ public:
 	}
 	virtual Expression* symplify()  override
 	{
-		Expression * l = left->symplify();
-		Expression * r = right->symplify();
-		if (l->not_zero() && r->not_zero())
+		left = left->symplify();
+		right = right->symplify();
+		if (left->not_zero() && right->not_zero())
 		{
-			if (l->not_one() && r->not_one())
-				return new Mul(l, r);
-			else if (l->not_one())
-				return l;
-			else if (r->not_one())
-				return r;
+			if (left->is_number() && right->is_number())
+				return calc_numb();
+			if (left->not_one() && right->not_one())
+				return this;
+			else if (left->not_one())
+				return left;
+			else if (right->not_one())
+				return right;
 			else return new Number(1);
 		}
 		else
@@ -250,14 +252,16 @@ public:
 	}
 	virtual Expression* symplify()  override
 	{
-		Expression * l = left->symplify();
-		Expression * r = right->symplify();
-		if (!l->not_zero())
-			return r;
-		else if (!r->not_zero())
-			return l;
+		left = left->symplify();
+		right = right->symplify();
+		if (left->is_number() && right->is_number())
+			return calc_numb();
+		if (!left->not_zero())
+			return right;
+		else if (!right->not_zero())
+			return left;
 		else
-			return new Sub(l, r);
+			return new Sub(left, right);
 	}
 	virtual Number* calc(double a, double b)
 	{
@@ -298,22 +302,24 @@ public:
 	}
 	virtual Expression* symplify()  override
 	{
-		Expression * l = left->symplify();
-		Expression * r = right->symplify();
-		if (l->not_zero() && r->not_zero())
+		left = left->symplify();
+		right = right->symplify();
+		if (left->is_number() && right->is_number())
+			return calc_numb();
+		if (left->not_zero() && right->not_zero())
 		{
-			if (l->not_one() && r->not_one())
-				return new Div(l, r);
-			else if (l->not_one())
+			if (left->not_one() && right->not_one())
+				return new Div(left, right);
+			else if (left->not_one())
 			{
-				assert(!r->not_one());
-				return l;
+				assert(!right->not_one());
+				return left;
 			}
 			else return new Number(1);
 		}
 		else
 		{
-			if (!l->not_zero())
+			if (!left->not_zero())
 				return new Number(0);
 			else return new Number(numeric_limits<double>::infinity());
 		}
@@ -332,7 +338,8 @@ public:
 	Pow(Expression *a, Expression *b)
 	{
 		base = a;
-		degree = b;
+		degree = b->symplify();
+		assert(degree->is_number());
 	}
 	virtual Mul * diff_impl(const string x) override
 	{
@@ -349,6 +356,16 @@ public:
 			if (degree->not_zero())
 				degree->print();
 			cout << ") ";
+	}
+	virtual Expression* symplify()  override
+	{
+		base = base->symplify();
+		if (base->is_number())
+			return calc(base->is_number()->val(), degree->is_number()->val());
+		else if (!degree->not_one())
+			return base;
+		else
+			return this;
 	}
 	virtual Number* calc(double a, double b)
 	{
@@ -471,96 +488,74 @@ void test(const Expression &e)
 	e.print();
 	cout << endl;
 }
+
+void test1(Expression &p, const string& X)
+{
+	p.print();
+	cout << endl;
+	Expression*p1 = p.diff(X);
+	p1->print();
+	cout << endl;
+}
 int main()
 {
-	Number t(2.);
-	variable y("y");
-	test(t);
-	test(y);
 	{
 		// x+2
-		cout << "test  X + 2 " << endl;
+		cout << "**** test  X + 2 " << endl;
 		variable x("x");
 		Number n(2);
 		Add s(&x, &n);
-		cout << "s = ";
-		s.print();
-		cout << endl;
-
-		Expression* s1 = s.diff("x");
-		cout << "s.diff = ";
-		s1->print();
-		cout << endl;
+		test1(s, "x");
 	}
 	{
 		// 5 - X
 		expr_p x1(new variable("x"));
-		cout << "test  5 - X " << endl;
+		cout << "***test  5 - X " << endl;
 		variable x("x");
 		Number n(5);
 		Sub s(&n, &x);
-		cout << "s = ";
-		s.print();
-		cout << endl;
-
-		Expression* s1 = s.diff("x");
-		cout << "s1.diff = ";
-		s1->print();
-		cout << endl;
+		test1(s, "x");
 	}
 	//x^3
 	{
+		cout << "*** x^3 " << endl;
 		Number n(3);
 		variable x("x");
 		Pow p(&x, &n);
-		p.print();
-		Expression*p1 = p.diff("x");
-		p1->print();
-		cout << endl;
+		test1(p, "x");
 	}
 	{
-		cout << "diff by y" << endl;
+		cout << "***diff by y" << endl;
 		Number n(3);
 		variable x("x");
 		Pow p(&x, &n);
-		p.print();
-		Expression*p1 = p.diff("y");
-		cout << "\n";
-		p1->print();
-		cout << endl;
+		test1(p, "y");
 	}
 	//5*x
 	{
+		cout << "***5*x" << endl;
 		Number n(5);
 		variable x("x");
 		Mul p(&n, &x);
-		p.print();
-		Expression*p1 = p.diff("x");
-		p1->print();
-		cout << endl;
+		test1(p, "x");
 	}
 	//3x^3+2*x^2+x+10
 	{
+		cout << "*** 3x^3+2*x^2+x+10" << endl;
 		Number a1(3), a2(2), a3(10);
 		variable x("x");
 		Pow p1(&x, &a1), p2(&x, &a2);
 		Mul q1(&a1, &p1), q2(&a2, &p2);
 		Add t(&q1, new Add(&q2, new Add(&x, &a3)));
-		t.print();
-		cout << "\n t1.symp = ";
-		Expression*t1 = t.diff("x");
-		t1->print();
-		cout << endl;
+		test1(t, "x");
 	}
 	//ctg^3(x)
 	{
+		cout << "*** ctg ^ 3(x)" << endl;
 		variable x("x");
 		Ctg c(&x);
 		Pow p(&c, new Number(3));
-		p.print();
-		Expression*p1 = p.diff("x");
-		p1->print();
-		cout << endl;
+		test1(p, "x");
 	}
 
 	_getch();
